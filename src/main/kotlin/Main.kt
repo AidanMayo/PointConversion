@@ -1,27 +1,33 @@
 package org.xephyrous
 
-import kotlin.math.acos
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.pow
-import kotlin.math.round
-import kotlin.math.sin
-import kotlin.math.sqrt
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.File
+import java.io.IOException
+import javax.imageio.ImageIO
+import kotlin.math.*
 import kotlin.random.Random
 
 fun main() {
     val testScreen = screen()
 
-    testScreen.camera.rotate(0.0,0.0,0.0)
+    testScreen.camera.rotate(45.0,16.0,12.0)
+    testScreen.camera.moveCam(-6.0,-2.0,2.0)
+    testScreen.camera.viewDistance = 20.0
+    testScreen.resize(25.0, 25.0)
 
-    testScreen.createPoint(0.0,0.0,0.0)
-    testScreen.createPoint(3.0,3.0,-4.0)
+    println(testScreen.camera)
 
-    val points = testScreen.snapshot()
-
-    for (point in points) {
-        println(point)
+    for (i in 1..100) {
+        testScreen.createRandomPoint(-10.0, 10.0)
     }
+
+    var points = testScreen.screenshot()
+    points.exportSnapshot("test1")
+
+    testScreen.camera.rotate(0.0, 0.0, 180.0)
+    points = testScreen.screenshot()
+    points.exportSnapshot("test2")
 }
 
 fun degreeToRad(degree: Double): Double {
@@ -38,9 +44,76 @@ fun Double.round(decimals: Int): Double {
     return round(this * multiplier) / multiplier
 }
 
+class snapshot(
+    xSize: Double,
+    ySize: Double,
+) {
+    var xSize = xSize
+        set(value) {
+            field = value.coerceAtLeast(20.0)
+        }
+    var ySize = ySize
+        set(value) {
+            field = value.coerceAtLeast(20.0)
+        }
+
+    val points = arrayListOf<twoDimPoint>()
+
+    fun addPoint(x: Double, y: Double) {
+        points.add(twoDimPoint(x, y))
+    }
+
+    fun resize(xSize: Double, ySize: Double) {
+        this.xSize = xSize
+        this.ySize = ySize
+    }
+
+    fun exportSnapshot(
+        name: String
+    ) {
+        try {
+            val width = (xSize*100).roundToInt()
+            val height = (ySize*100).roundToInt()
+
+            val buffImg = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+
+            val g2d = buffImg.createGraphics()
+            g2d.color = Color.BLACK
+            g2d.fillRect(0, 0, width, height)
+
+            g2d.color = Color.GRAY
+            g2d.fillOval(0, 0, width, height)
+
+            g2d.color = Color.BLUE
+            g2d.fillOval(2, 2, width-4, height-4)
+
+            g2d.color = Color.WHITE
+
+            for (point in points) {
+                val xLoc = ((point.x+(xSize/2))*100).roundToInt()
+                val yLoc = ((point.y+(ySize/2))*100).roundToInt()
+
+                g2d.fillOval(xLoc-4, yLoc-4, 8, 8)
+            }
+
+            g2d.dispose()
+
+            val outputFile = File("$name.png")
+            ImageIO.write(buffImg, "png", outputFile)
+
+            println("Exported To $name.png")
+
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+}
+
 class screen() {
     val points = arrayListOf<threeDimPoint>()
     val camera = camera()
+
+    val screenshots = arrayListOf<snapshot>()
 
     val camX: Double
         get() = this.camera.cameraPosition.X
@@ -58,16 +131,21 @@ class screen() {
     // Relative Screen size, stretches the square camera to the given screen size
     // Camera detects points in a circular area, no points should be found in the corners
     // Screen space made from [-size/2, size/2]
-    // Min size: 20x20
-    // Default size: 100x100
-    var xSize = 100.0
+    // Min size: 5x5
+    // Default size: 50x50
+    var xSize = 50.0
         set(value) {
-            field = value.coerceAtLeast(20.0)
+            field = value.coerceAtLeast(5.0)
         }
-    var ySize = 100.0
+    var ySize = 50.0
         set(value) {
-            field = value.coerceAtLeast(20.0)
+            field = value.coerceAtLeast(5.0)
         }
+
+    fun resize(xSize: Double, ySize: Double) {
+        this.xSize = xSize
+        this.ySize = ySize
+    }
 
     // Adds a given point
     fun createPoint(
@@ -88,8 +166,8 @@ class screen() {
 
     // I want to create a camera that can see within a given FOV
     // All points should lie within a circle, as the camera sees in a circle
-    fun snapshot(): ArrayList<twoDimPoint> {
-        val displayedPoints = arrayListOf<twoDimPoint>()
+    fun screenshot(): snapshot {
+        val snap = snapshot(xSize, ySize)
 
         for (point in points) {
             // Create a temporary point in space relative to the camera
@@ -122,15 +200,14 @@ class screen() {
             // pointPhi/(camera.FOV/2)*cos(thetaPoint), pointPhi/(camera.FOV/2)*sin(thetaPoint)
             // cartesian with respect to [-1,1] [-1,1]
 
-            displayedPoints.add(
-                twoDimPoint(
-                    ((pointPhi/(camera.FOV/2)*cos(degreeToRad(thetaPoint)))*(xSize/2)).round(14), // Scale points to screen
-                    ((pointPhi/(camera.FOV/2)*sin(degreeToRad(thetaPoint)))*(ySize/2)).round(14)
-                )
+            snap.addPoint(
+                ((pointPhi/(camera.FOV/2)*cos(degreeToRad(thetaPoint)))*(xSize/2)).round(14), // Scale points to screen
+                ((pointPhi/(camera.FOV/2)*sin(degreeToRad(thetaPoint)))*(ySize/2)).round(14)
             )
         }
 
-        return displayedPoints
+        screenshots.add(snap)
+        return snap
     }
 
     fun findVisiblePoints() : ArrayList<threeDimPoint> {
@@ -219,7 +296,7 @@ class camera(
         return """
             -=-=-=-=-=-=-=-=-=-=-
             Camera Info:
-              |  Camera Located at: $cameraPosition
+              | Camera Located at: $cameraPosition
               | Camera Facing: $xRot, $yRot, $zRot
               | Current FOV: $FOV
               | Current ViewDistance : $viewDistance
