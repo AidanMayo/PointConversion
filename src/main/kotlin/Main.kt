@@ -4,6 +4,7 @@ import kotlin.math.acos
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
+import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -20,6 +21,15 @@ fun main() {
 
     val testScreen = screen()
 
+    println(testScreen.camera.cameraPosition)
+
+    testScreen.camera.encircle(90.0,45.0)
+
+    println(testScreen.camera.cameraPosition)
+
+    testScreen.camera.encircle(0.0,45.0)
+
+    println(testScreen.camera.cameraPosition)
 
 }
 
@@ -29,6 +39,12 @@ fun degreeToRad(degree: Double): Double {
 
 fun radToDegree(rad: Double): Double {
     return rad * (180.0 / Math.PI)
+}
+
+fun Double.round(decimals: Int): Double {
+    var multiplier = 1.0
+    repeat(decimals) { multiplier *= 10 }
+    return round(this * multiplier) / multiplier
 }
 
 class screen() {
@@ -99,18 +115,41 @@ class camera(
     fun encircle(horiRot: Double, vertRot: Double) {
         this.rotate(-horiRot, -vertRot, 0.0)
 
+        // Make rotation values only one rotation cycle
+        val fixedHor = horiRot%360
+        val fixedVer = vertRot%360
+
         // Conversion to spherical coordinates
 
         // horizontal
         val radius = sqrt(cameraPosition.X.pow(2) + cameraPosition.Y.pow(2) + cameraPosition.Z.pow(2))
-        val thetaRot = radToDegree(atan2(cameraPosition.X, cameraPosition.Z))
-        val phiRot = acos(cameraPosition.Y/radius)
+        var thetaRot = radToDegree(atan2(cameraPosition.X, cameraPosition.Z))
+        var phiRot = radToDegree(acos(cameraPosition.Y/radius))
+
+        thetaRot = ((((thetaRot+180) + fixedHor)%360)-180).round(14)
 
         // if phi goes to 0 we have to flip the theta rot by 180/ this is difficult
+        // its not actually difficult ur just a bitch
+
+        val delta = phiRot - fixedVer
+        phiRot = when {
+            delta < 0 && delta > -180 -> {
+                thetaRot *= -1
+                (fixedVer - phiRot).round(14)
+            }
+            delta >= 0 -> delta.round(15)
+            else -> (phiRot + (360 - fixedVer)).round(14)
+        }
+
+        cameraPosition.setCoordinates(
+            (radius*sin(degreeToRad(thetaRot))*sin(degreeToRad(phiRot))).round(14),
+            (radius*cos(degreeToRad(phiRot))).round(14),
+            (radius*sin(degreeToRad(phiRot))*cos(degreeToRad(thetaRot))).round(14)
+        )
     }
 
     // ! Rotation should automatically truncate to a range of -180 to 180 !
-    // TODO: Fix these to properly work with negative values
+    // TODO: have a brain, i already made them work with negative values idiot
     // Positive = right | Negative = left
     private fun rotateX(xRot: Double) {
         this.xRot = (((this.xRot+180) + xRot)%360)-180
@@ -153,8 +192,8 @@ class threeDimPoint(
     var Y: Double,
     var Z: Double
 ) {
-    fun getLocation() : String {
-        return "X:${X}, Y:${Y}, Z:${Z}"
+    override fun toString() : String {
+        return "X:${X.round(5)}, Y:${Y.round(5)}, Z:${Z.round(5)}"
     }
 
     fun transform(
@@ -165,6 +204,16 @@ class threeDimPoint(
         this.X += X
         this.Y += Y
         this.Z += Z
+    }
+
+    fun setCoordinates(
+        X: Double,
+        Y: Double,
+        Z: Double
+    ) {
+        this.X = X
+        this.Y = Y
+        this.Z = Z
     }
 
     fun calculateDistance(other: threeDimPoint) : Double {
