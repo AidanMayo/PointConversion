@@ -1,4 +1,4 @@
-package org.example
+package org.xephyrous
 
 import kotlin.math.acos
 import kotlin.math.atan2
@@ -10,27 +10,18 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 fun main() {
-    /*
-    * Point math is easily rotated by understanding how sine waves work
-    *
-    * By understanding that on a -180 to 180 degree scale the sine wave will move in a circular motion
-    * we can use basic math to determine the movement of a point in 2D space relative to 3D space
-    *
-    * This is the fundamental component that allows us to convert 3D points with a given rotation to a 2d picture from a camera.
-     */
-
     val testScreen = screen()
 
-    println(testScreen.camera.cameraPosition)
+    testScreen.camera.rotate(50.0,0.0,0.0)
 
-    testScreen.camera.encircle(90.0,45.0)
+    testScreen.createPoint(0.0,0.0,0.0)
+    testScreen.createPoint(5.0,0.0,1.0)
 
-    println(testScreen.camera.cameraPosition)
+    val points = testScreen.findVisiblePoints()
 
-    testScreen.camera.encircle(0.0,45.0)
-
-    println(testScreen.camera.cameraPosition)
-
+    for (point in points) {
+        println(point)
+    }
 }
 
 fun degreeToRad(degree: Double): Double {
@@ -49,11 +40,46 @@ fun Double.round(decimals: Int): Double {
 
 class screen() {
     val points = arrayListOf<threeDimPoint>()
-
     val camera = camera()
 
-    // Adds a random point within a given range
+    val camX: Double
+        get() = this.camera.cameraPosition.X
+    val camY: Double
+        get() = this.camera.cameraPosition.Y
+    val camZ: Double
+        get() = this.camera.cameraPosition.Z
+    val camRotX: Double
+        get() = this.camera.xRot
+    val camRotY: Double
+        get() = this.camera.yRot
+    val camRotZ: Double
+        get() = this.camera.zRot
+
+    // Relative Screen size, stretches the square camera to the given screen size
+    // Camera detects points in a circular area, no points should be found in the corners
+    // Screen space made from [-size/2, size/2]
+    // Min size: 20x20
+    // Default size: 100x100
+    var xSize = 100.0
+        set(value) {
+            field = value.coerceAtLeast(20.0)
+        }
+    var ySize = 100.0
+        set(value) {
+            field = value.coerceAtLeast(20.0)
+        }
+
+    // Adds a given point
     fun createPoint(
+        X: Double,
+        Y: Double,
+        Z: Double
+    ) {
+        points.add(threeDimPoint(X, Y, Z))
+    }
+
+    // Adds a random point within a given range
+    fun createRandomPoint(
         low: Double,
         high: Double
     ) {
@@ -61,19 +87,47 @@ class screen() {
     }
 
     // I want to create a camera that can see within a given FOV
+    // All points should lie within a circle, as the camera sees in a circle
     fun snapshot(): ArrayList<twoDimPoint> {
         val displayedPoints = arrayListOf<twoDimPoint>()
 
         for (point in points) {
-            if (camera.viewDistance < camera.cameraPosition.calculateDistance(point)) {
-                continue
-            }
+            // Create a temporary point in space relative to the camera
+            // This point in space will imagine the camera is facing upwards (Y Facing)
+            val relativePoint = threeDimPoint(point.X-camX, point.Y-camY, camZ-point.Z)
 
-            // In FOV Check
+            val rad = relativePoint.calcOriginDist()
+            if (camera.viewDistance < rad) { continue }
 
+            relativePoint.encircle(-camRotX, -camRotY)
+
+            // Use spherical coords to figure it out!
+            val pointPhi = radToDegree(acos(point.Z/rad))
+            if (pointPhi > (camera.FOV)/2) { continue }
 
             // Place point in 2D
             displayedPoints.add(twoDimPoint(1.0, 1.0) /* Write code to change to 2d spot */)
+        }
+
+        return displayedPoints
+    }
+
+    fun findVisiblePoints() : ArrayList<threeDimPoint> {
+        val displayedPoints = arrayListOf<threeDimPoint>()
+
+        for (point in points) {
+            val relativePoint = threeDimPoint(point.X-camX, point.Y-camY, camZ-point.Z)
+
+            val rad = relativePoint.calcOriginDist()
+            if (camera.viewDistance < rad) { continue }
+
+            relativePoint.encircle(-camRotX, -camRotY)
+
+            val pointPhi = radToDegree(acos(relativePoint.Z/rad))
+            if (pointPhi > (camera.FOV)/2) { continue }
+
+            // Place point in 2D
+            displayedPoints.add(point) /* Write code to change to 2d spot */
         }
 
         return displayedPoints
@@ -82,7 +136,7 @@ class screen() {
 
 // Camera starts
 class camera(
-    var viewDistance: Double = 1.0, // View Distance of camera | Works as a radius from the camera
+    var viewDistance: Double = 10.0, // View Distance of camera | Works as a radius from the camera
     var cameraPosition: threeDimPoint = threeDimPoint(0.0, 0.0, 1.0), // Camera Position
     var xRot: Double = 0.0, // Camera X Rotation (Left-Right)
     var yRot: Double = 0.0, // Camera Y Rotation (Up-Down)
@@ -114,42 +168,10 @@ class camera(
     // Positive vertical moves up
     fun encircle(horiRot: Double, vertRot: Double) {
         this.rotate(-horiRot, -vertRot, 0.0)
-
-        // Make rotation values only one rotation cycle
-        val fixedHor = horiRot%360
-        val fixedVer = vertRot%360
-
-        // Conversion to spherical coordinates
-
-        // horizontal
-        val radius = sqrt(cameraPosition.X.pow(2) + cameraPosition.Y.pow(2) + cameraPosition.Z.pow(2))
-        var thetaRot = radToDegree(atan2(cameraPosition.X, cameraPosition.Z))
-        var phiRot = radToDegree(acos(cameraPosition.Y/radius))
-
-        thetaRot = ((((thetaRot+180) + fixedHor)%360)-180).round(14)
-
-        // if phi goes to 0 we have to flip the theta rot by 180/ this is difficult
-        // its not actually difficult ur just a bitch
-
-        val delta = phiRot - fixedVer
-        phiRot = when {
-            delta < 0 && delta > -180 -> {
-                thetaRot *= -1
-                (fixedVer - phiRot).round(14)
-            }
-            delta >= 0 -> delta.round(15)
-            else -> (phiRot + (360 - fixedVer)).round(14)
-        }
-
-        cameraPosition.setCoordinates(
-            (radius*sin(degreeToRad(thetaRot))*sin(degreeToRad(phiRot))).round(14),
-            (radius*cos(degreeToRad(phiRot))).round(14),
-            (radius*sin(degreeToRad(phiRot))*cos(degreeToRad(thetaRot))).round(14)
-        )
+        this.cameraPosition.encircle(horiRot, vertRot)
     }
 
     // ! Rotation should automatically truncate to a range of -180 to 180 !
-    // TODO: have a brain, i already made them work with negative values idiot
     // Positive = right | Negative = left
     private fun rotateX(xRot: Double) {
         this.xRot = (((this.xRot+180) + xRot)%360)-180
@@ -170,6 +192,18 @@ class camera(
         this.rotateX(x)
         this.rotateY(y)
         this.rotateZ(z)
+    }
+
+    override fun toString(): String {
+        return """
+            -=-=-=-=-=-=-=-=-=-=-
+            Camera Info:
+              |  Camera Located at: $cameraPosition
+              | Camera Facing: $xRot, $yRot, $zRot
+              | Current FOV: $FOV
+              | Current ViewDistance : $viewDistance
+            -=-=-=-=-=-=-=-=-=-=-
+        """.trimIndent()
     }
 }
 
@@ -214,6 +248,47 @@ class threeDimPoint(
         this.X = X
         this.Y = Y
         this.Z = Z
+    }
+
+    // Rotates point around the origin
+    // Positive horizontal moves right
+    // Positive vertical moves up
+    fun encircle(horiRot: Double, vertRot: Double) {
+        // Make rotation values only one rotation cycle
+        val fixedHor = horiRot%360
+        val fixedVer = vertRot%360
+
+        // Conversion to spherical coordinates
+
+        // horizontal
+        val radius = sqrt(this.X.pow(2) + this.Y.pow(2) + this.Z.pow(2))
+        var thetaRot = radToDegree(atan2(this.X, this.Z))
+        var phiRot = radToDegree(acos(this.Y/radius))
+
+        thetaRot = ((((thetaRot+180) + fixedHor)%360)-180).round(14)
+
+        // if phi goes to 0 we have to flip the theta rot by 180/ this is difficult
+        // its not actually difficult ur just a bitch
+
+        val delta = phiRot - fixedVer
+        phiRot = when {
+            delta < 0 && delta > -180 -> {
+                thetaRot *= -1
+                (fixedVer - phiRot).round(14)
+            }
+            delta >= 0 -> delta.round(15)
+            else -> (phiRot + (360 - fixedVer)).round(14)
+        }
+
+        this.setCoordinates(
+            (radius*sin(degreeToRad(thetaRot))*sin(degreeToRad(phiRot))).round(14),
+            (radius*cos(degreeToRad(phiRot))).round(14),
+            (radius*sin(degreeToRad(phiRot))*cos(degreeToRad(thetaRot))).round(14)
+        )
+    }
+
+    fun calcOriginDist() : Double {
+        return sqrt((this.X).pow(2) + (this.Y).pow(2) + (this.Z).pow(2))
     }
 
     fun calculateDistance(other: threeDimPoint) : Double {
