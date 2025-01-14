@@ -114,14 +114,17 @@ class screen() {
 
             //-x, y is our model point
 
-            val thetaPoint = radToDegree(atan2(relativePoint.Y, relativePoint.X)).round(14)
+            var thetaPoint = radToDegree(atan2(relativePoint.Y, relativePoint.X)).round(14)
+
+            // Rotate point based on camera rotation
+            thetaPoint = (((thetaPoint+180) + camRotZ)%360)-180
 
             // pointPhi/(camera.FOV/2)*cos(thetaPoint), pointPhi/(camera.FOV/2)*sin(thetaPoint)
             // cartesian with respect to [-1,1] [-1,1]
 
             displayedPoints.add(
                 twoDimPoint(
-                    ((pointPhi/(camera.FOV/2)*cos(degreeToRad(thetaPoint)))*(xSize/2)).round(14),
+                    ((pointPhi/(camera.FOV/2)*cos(degreeToRad(thetaPoint)))*(xSize/2)).round(14), // Scale points to screen
                     ((pointPhi/(camera.FOV/2)*sin(degreeToRad(thetaPoint)))*(ySize/2)).round(14)
                 )
             )
@@ -141,7 +144,7 @@ class screen() {
 
             relativePoint.encircle(-camRotX, -camRotY)
 
-            val pointPhi = radToDegree(acos(relativePoint.Z/rad))
+            val pointPhi = radToDegree(acos(relativePoint.Z/rad)).round(14)
             if (pointPhi > (camera.FOV)/2) { continue }
 
             // Place point in 2D
