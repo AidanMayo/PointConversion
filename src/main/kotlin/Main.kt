@@ -1,8 +1,12 @@
 package org.example
 
+import kotlin.math.acos
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.pow
+import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 fun main() {
     /*
@@ -14,13 +18,17 @@ fun main() {
     * This is the fundamental component that allows us to convert 3D points with a given rotation to a 2d picture from a camera.
      */
 
+    val testScreen = screen()
 
 
-    println(atan2(0.0, 1.0)) // pi/4
 }
 
 fun degreeToRad(degree: Double): Double {
     return degree * (Math.PI/180)
+}
+
+fun radToDegree(rad: Double): Double {
+    return rad * (180.0 / Math.PI)
 }
 
 class screen() {
@@ -28,8 +36,15 @@ class screen() {
 
     val camera = camera()
 
-    // I want to create a camera that can see within a given FOV
+    // Adds a random point within a given range
+    fun createPoint(
+        low: Double,
+        high: Double
+    ) {
+        points.add(threeDimPoint(Random.nextDouble(low, high), Random.nextDouble(low, high), Random.nextDouble(low, high)))
+    }
 
+    // I want to create a camera that can see within a given FOV
     fun snapshot(): ArrayList<twoDimPoint> {
         val displayedPoints = arrayListOf<twoDimPoint>()
 
@@ -42,7 +57,7 @@ class screen() {
 
 
             // Place point in 2D
-            displayedPoints.add(twoDimPoint(0.0, 0.0) /* Write code to change to 2d spot */)
+            displayedPoints.add(twoDimPoint(1.0, 1.0) /* Write code to change to 2d spot */)
         }
 
         return displayedPoints
@@ -52,7 +67,7 @@ class screen() {
 // Camera starts
 class camera(
     var viewDistance: Double = 1.0, // View Distance of camera | Works as a radius from the camera
-    var cameraPosition: threeDimPoint = threeDimPoint(1.0, 0.0, 0.0), // Camera Position
+    var cameraPosition: threeDimPoint = threeDimPoint(0.0, 0.0, 1.0), // Camera Position
     var xRot: Double = 0.0, // Camera X Rotation (Left-Right)
     var yRot: Double = 0.0, // Camera Y Rotation (Up-Down)
     var zRot: Double = 0.0 // Camera Z Rotation (Clock-style)
@@ -84,14 +99,18 @@ class camera(
     fun encircle(horiRot: Double, vertRot: Double) {
         this.rotate(-horiRot, -vertRot, 0.0)
 
+        // Conversion to spherical coordinates
+
         // horizontal
-        val horRad = sqrt(cameraPosition.X.pow(2) + cameraPosition.Z.pow(2))
-        val horRot = atan2(cameraPosition.X, cameraPosition.Z)
+        val radius = sqrt(cameraPosition.X.pow(2) + cameraPosition.Y.pow(2) + cameraPosition.Z.pow(2))
+        val thetaRot = radToDegree(atan2(cameraPosition.X, cameraPosition.Z))
+        val phiRot = acos(cameraPosition.Y/radius)
 
-
+        // if phi goes to 0 we have to flip the theta rot by 180/ this is difficult
     }
 
     // ! Rotation should automatically truncate to a range of -180 to 180 !
+    // TODO: Fix these to properly work with negative values
     // Positive = right | Negative = left
     private fun rotateX(xRot: Double) {
         this.xRot = (((this.xRot+180) + xRot)%360)-180
@@ -134,6 +153,10 @@ class threeDimPoint(
     var Y: Double,
     var Z: Double
 ) {
+    fun getLocation() : String {
+        return "X:${X}, Y:${Y}, Z:${Z}"
+    }
+
     fun transform(
         X: Double,
         Y: Double,
