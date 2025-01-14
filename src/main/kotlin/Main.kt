@@ -12,12 +12,12 @@ import kotlin.random.Random
 fun main() {
     val testScreen = screen()
 
-    testScreen.camera.rotate(50.0,0.0,0.0)
+    testScreen.camera.rotate(0.0,0.0,0.0)
 
     testScreen.createPoint(0.0,0.0,0.0)
-    testScreen.createPoint(5.0,0.0,1.0)
+    testScreen.createPoint(3.0,3.0,-4.0)
 
-    val points = testScreen.findVisiblePoints()
+    val points = testScreen.snapshot()
 
     for (point in points) {
         println(point)
@@ -102,11 +102,29 @@ class screen() {
             relativePoint.encircle(-camRotX, -camRotY)
 
             // Use spherical coords to figure it out!
-            val pointPhi = radToDegree(acos(point.Z/rad))
+            val pointPhi = radToDegree(acos(relativePoint.Z/rad)).round(14)
             if (pointPhi > (camera.FOV)/2) { continue }
 
             // Place point in 2D
-            displayedPoints.add(twoDimPoint(1.0, 1.0) /* Write code to change to 2d spot */)
+            // Method: find point in arbitrary space
+            // stretch screen to be display size
+
+            // can grab point off of a modified phi to fov and theta into polar coordinates.
+            // convert that to rectangular and you get the answer
+
+            //-x, y is our model point
+
+            val thetaPoint = radToDegree(atan2(relativePoint.Y, relativePoint.X)).round(14)
+
+            // pointPhi/(camera.FOV/2)*cos(thetaPoint), pointPhi/(camera.FOV/2)*sin(thetaPoint)
+            // cartesian with respect to [-1,1] [-1,1]
+
+            displayedPoints.add(
+                twoDimPoint(
+                    ((pointPhi/(camera.FOV/2)*cos(degreeToRad(thetaPoint)))*(xSize/2)).round(14),
+                    ((pointPhi/(camera.FOV/2)*sin(degreeToRad(thetaPoint)))*(ySize/2)).round(14)
+                )
+            )
         }
 
         return displayedPoints
@@ -211,6 +229,10 @@ class twoDimPoint(
     var x: Double,
     var y: Double
 ) {
+    override fun toString(): String {
+        return "X:${x.round(5)}, Y:${y.round(5)}"
+    }
+
     fun transform(x: Double, y: Double) {
         this.x += x
         this.y += y
